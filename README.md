@@ -28,4 +28,4 @@ uv run --no-project python trials/tally.py haiku
 uv run --no-project python trials/tally_reps.py
 ```
 
-The tests and the tallies make no paid call. A new run calls `claude -p` and is paid: the protocol it belongs to says how many, and nothing runs before its budget is agreed.
+The tests and the tallies make no paid call. Eleven tests replay REPS and are skipped without a clone of it beside this one, at `../REPS`, or at `REPS_DIR`. A new run calls `claude -p` and is paid: the protocol it belongs to says how many, and nothing runs before its budget is agreed.
