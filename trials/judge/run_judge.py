@@ -8,6 +8,9 @@ instructions and the five inputs, and its answer lands in verdict.md beside the 
 The judge is never the model that ran the trial, read from its session.json, and is
 recorded in judge.json with what the verdict cost. A trial whose verdict has a row for every
 charter line is skipped; a verdict missing a line is judged again.
+
+No batch takes the usage window past 80% (trials/window.py): at 80% the verdicts still running are
+ended, leave nothing, and none starts; the same command judges them in the next window.
 """
 
 import argparse
@@ -19,6 +22,9 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import window  # noqa: E402  trials/window.py
 
 JUDGE = Path(__file__).resolve().parent
 TRIALS = JUDGE.parent
@@ -142,6 +148,10 @@ def seam_of(trial_dir):
     return session["request"].split("/")[1]
 
 
+# One reading of the usage window for the whole batch.
+BATCH = window.Window()
+
+
 def judged(trial_dir):
     """A trial is judged once its verdict has a row for every line; an incomplete one is judged again."""
     verdict = trial_dir / "verdict.md"
@@ -155,22 +165,19 @@ def judge_model(trial_dir):
 
 def judge(trial_dir):
     model = judge_model(trial_dir)
-    completed = subprocess.run(
+    outcome = window.stream(
         [shutil.which("claude"), "-p", "--model", model, "--safe-mode", "--tools", "",
-         "--output-format", "json"],
-        input=prompt(trial_dir),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        timeout=TIMEOUT_SECONDS,
+         "--output-format", "stream-json", "--verbose"],
+        prompt(trial_dir),
+        BATCH,
+        TIMEOUT_SECONDS,
     )
-    try:
-        result = json.loads(completed.stdout)
-    except json.JSONDecodeError:
-        result = {"is_error": True, "result": completed.stdout}
-    if completed.returncode != 0 or result.get("is_error"):
-        return trial_dir.name, (f"ERROR {completed.returncode}: "
-                                f"{completed.stderr[-500:] or str(result.get('result'))[-500:]}")
+    if outcome.stopped:
+        return trial_dir.name, "not judged: the usage window is at 80%; run the same command in the next window"
+    result = outcome.result or {"is_error": True, "result": "timeout" if outcome.timed_out else "the session ended with no result"}
+    if outcome.returncode != 0 or result.get("is_error"):
+        return trial_dir.name, (f"ERROR {outcome.returncode}: "
+                                f"{outcome.stderr[-500:] or str(result.get('result'))[-500:]}")
     verdict = result.get("result") or ""
     (trial_dir / "verdict.md").write_text(verdict, encoding="utf-8")
     missing = missing_lines(verdict, seam_of(trial_dir))
@@ -201,7 +208,7 @@ def main():
     print(f"{len(todo)} trials to judge", flush=True)
     with concurrent.futures.ThreadPoolExecutor(args.parallel) as pool:
         for trial_id, status in pool.map(judge, todo):
-            print(f"{trial_id}: {status}", flush=True)
+            print(f"{trial_id}: {status}, window {window.shown(BATCH)}", flush=True)
 
 
 if __name__ == "__main__":

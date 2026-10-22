@@ -22,7 +22,6 @@ Sessions 1 to 7 were made in `skills`, before the trials had a repository of the
 
 **Shows**: per case, the rule of 0.10.0 beside the rule of 0.11.0, on REPS's seven cases and on `extract_invoice 05`, `action_items 07` and `action_items 04`: the asked moves made and flagged, the episodes that drift, and whether the rule holds.
 
-1. **The runner stops at 80% of the usage window.** Read before each run, resumed in the next window - [ticket](docs/work/8-asked-move/issues/01-usage-window.md)
 2. **The protocol for the rule of 0.11.0.** Only `drafted` runs again; the decision rule fixed before the runs - [ticket](docs/work/8-asked-move/issues/02-protocol.md)
 3. **The rule of 0.11.0, run and read.** 30 runs, judged, calibrated with the user - [ticket](docs/work/8-asked-move/issues/03-runs-and-results.md)
 

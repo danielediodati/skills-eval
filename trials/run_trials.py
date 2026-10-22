@@ -10,6 +10,9 @@ seam's files. Its diff, the agent's final answer and the session's numbers land 
 trials/runs/<model>/<condition>/<seam>-<request>-<repeat>/. A trial whose folder already holds a
 session.json without an error is skipped, so an interrupted or failed run resumes.
 
+No batch takes the usage window past 80% (trials/window.py): at 80% the sessions still running are
+ended, leave nothing, and none starts; the same command runs them in the next window.
+
 With --reps, a trial replays a case from trials/reps/ instead: its directory is REPS at the case's
 parent commit, from `git archive` (REPS is never touched, and no .env comes with it), installed with
 `uv sync`. REPS's CLAUDE.md reaches the agent in both conditions, and in "drafted" the rule is
@@ -30,6 +33,8 @@ import tarfile
 import tempfile
 import textwrap
 from pathlib import Path
+
+import window
 
 TRIALS = Path(__file__).resolve().parent
 SEAMS = TRIALS / "seams"
@@ -68,7 +73,7 @@ PROVIDER_KEYS = re.compile(r"^(GROQ|OPENROUTER|OLLAMA|TELEGRAM|LANGSMITH|LANGCHA
 CLAUDE_ARGS = [
     "-p",
     "--safe-mode",
-    "--output-format", "json",
+    "--output-format", "stream-json", "--verbose",
     "--tools", "Read,Edit,Write,Glob,Grep,Bash",
     "--allowedTools", "Read Edit Write Glob Grep Bash(python *) Bash(python3 *) Bash(py *)",
     "--permission-mode", "acceptEdits",
@@ -233,27 +238,23 @@ def claude_args(seam_dir):
 
 
 def run(model, condition, trial_id, seam_dir, request, out):
+    if BATCH.full():  # nothing to prepare for a session that will not start
+        return trial_id, None
     work = prepare(model, condition, trial_id, seam_dir)
     before = snapshot(work)
-    try:
-        completed = subprocess.run(
-            [shutil.which("claude"), *claude_args(seam_dir), "--model", MODELS[model],
-             *system_prompt_args(condition, work)],
-            input=request.read_text(encoding="utf-8"),
-            cwd=work,
-            env=session_env(),
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            timeout=REPS_TIMEOUT_SECONDS if seam_dir.parent == REPS_CASES else TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired:
-        # A failed trial, run again on the next pass; the others go on.
-        completed = subprocess.CompletedProcess([], None, stdout="", stderr="timeout")
-    try:
-        result = json.loads(completed.stdout)
-    except json.JSONDecodeError:
-        result = {"is_error": True, "result": completed.stdout, "stderr": completed.stderr}
+    outcome = window.stream(
+        [shutil.which("claude"), *claude_args(seam_dir), "--model", MODELS[model],
+         *system_prompt_args(condition, work)],
+        request.read_text(encoding="utf-8"),
+        BATCH,
+        REPS_TIMEOUT_SECONDS if seam_dir.parent == REPS_CASES else TIMEOUT_SECONDS,
+        cwd=work,
+        env=session_env(),
+    )
+    if outcome.stopped:
+        return trial_id, None
+    # A session that timed out or failed is a failed trial, run again on the next pass; the others go on.
+    result = outcome.result or {"is_error": True, "result": "timeout" if outcome.timed_out else "the session ended with no result"}
 
     out.mkdir(parents=True, exist_ok=True)
     (out / "diff.patch").write_text(unified_diff(before, snapshot(work)), encoding="utf-8")
@@ -264,15 +265,19 @@ def run(model, condition, trial_id, seam_dir, request, out):
         "model": MODELS[model],
         "request": request.relative_to(TRIALS).as_posix(),
         **({"parent": reps_case(trial_id.rsplit("-", 1)[0])[1]} if seam_dir.parent == REPS_CASES else {}),
-        "exit_code": completed.returncode,
+        "exit_code": outcome.returncode,
         **{key: result.get(key) for key in (
             "is_error", "subtype", "num_turns", "duration_ms", "total_cost_usd", "session_id",
         )},
     }
     if result.get("is_error"):
-        session["stderr"] = completed.stderr[-2000:]
+        session["stderr"] = outcome.stderr[-2000:]
     (out / "session.json").write_text(json.dumps(session, indent=2) + "\n", encoding="utf-8")
     return trial_id, session
+
+
+# One reading of the usage window for the whole batch.
+BATCH = window.Window()
 
 
 def done(out):
@@ -302,12 +307,19 @@ def main():
               else trials(args.runs.resolve(), args.model, args.condition, args.requests))
     todo = [t for t in source if (not args.only or t[0] in args.only) and not done(t[3])]
     print(f"{len(todo)} trials to run", flush=True)
+    stopped = 0
     with concurrent.futures.ThreadPoolExecutor(args.parallel) as pool:
         futures = [pool.submit(run, args.model, args.condition, *t) for t in todo]
         for future in concurrent.futures.as_completed(futures):
             trial_id, session = future.result()
+            if session is None:
+                stopped += 1
+                continue
             status = "ERROR" if session.get("is_error") else "ok"
-            print(f"{trial_id}: {status}, {session.get('num_turns')} turns", flush=True)
+            print(f"{trial_id}: {status}, {session.get('num_turns')} turns, window {window.shown(BATCH)}", flush=True)
+    if stopped:
+        print(f"Stopped at {window.shown(BATCH)} of the usage window: {stopped} trials not run. "
+              "Run the same command in the next window.", flush=True)
 
 
 if __name__ == "__main__":

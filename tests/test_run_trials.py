@@ -23,6 +23,19 @@ WRITE_CHARTERS = TRIALS / "write_charters.py"
 SEAM = TRIALS / "seams" / "triage_ticket"
 
 
+_POPEN = subprocess.Popen
+
+
+def _no_real_session(args, *rest, **options):
+    """A test that reaches a real `claude` would spend the user's usage window: it fails instead."""
+    if args and Path(str(args[0])).stem.lower() == "claude":
+        raise AssertionError(f"a test launched a real session: {args[:3]}")
+    return _POPEN(args, *rest, **options)
+
+
+subprocess.Popen = _no_real_session
+
+
 def load(path: Path):
     # A script finds its neighbours the way it does when run: from its own directory.
     if str(path.parent) not in sys.path:
@@ -223,11 +236,11 @@ class Judge(unittest.TestCase):
 
     def test_a_verdict_is_saved_with_what_it_cost(self):
         trial = trial_dir(Path(self._tmp.name), "claude-sonnet-5-5")
-        answer = json.dumps({"result": "| F1 | held | not touched |\n", "total_cost_usd": 0.1234, "is_error": False})
-        done = subprocess.CompletedProcess([], 0, stdout=answer, stderr="")
-        with mock.patch.object(self.judge.subprocess, "run", return_value=done) as run:
+        answer = {"result": "| F1 | held | not touched |\n", "total_cost_usd": 0.1234, "is_error": False}
+        done = self.judge.window.Outcome(answer, 0, "", stopped=False, timed_out=False)
+        with mock.patch.object(self.judge.window, "stream", return_value=done) as stream:
             self.judge.judge(trial)
-        self.assertIn("json", run.call_args.args[0])
+        self.assertIn("stream-json", stream.call_args.args[0])
         self.assertEqual((trial / "verdict.md").read_text(encoding="utf-8"), "| F1 | held | not touched |\n")
         record = json.loads((trial / "judge.json").read_text(encoding="utf-8"))
         self.assertEqual(record["model"], "claude-opus-5-5")
@@ -235,9 +248,9 @@ class Judge(unittest.TestCase):
 
     def test_a_judge_that_fails_leaves_no_verdict(self):
         trial = trial_dir(Path(self._tmp.name), "claude-sonnet-5-5")
-        answer = json.dumps({"result": "Not logged in", "total_cost_usd": 0, "is_error": True})
-        done = subprocess.CompletedProcess([], 1, stdout=answer, stderr="")
-        with mock.patch.object(self.judge.subprocess, "run", return_value=done):
+        answer = {"result": "Not logged in", "total_cost_usd": 0, "is_error": True}
+        done = self.judge.window.Outcome(answer, 1, "", stopped=False, timed_out=False)
+        with mock.patch.object(self.judge.window, "stream", return_value=done):
             _, status = self.judge.judge(trial)
         self.assertIn("ERROR", status)
         self.assertFalse((trial / "verdict.md").exists())
@@ -302,8 +315,8 @@ class RepsCases(unittest.TestCase):
         runner = load(RUN_TRIALS)
         with tempfile.TemporaryDirectory() as tmp:
             runner.WORK_ROOT = Path(tmp) / "work"
-            timeout = runner.subprocess.TimeoutExpired(["claude"], 1)
-            with mock.patch.object(runner.subprocess, "run", side_effect=timeout):
+            timeout = runner.window.Outcome(None, None, "", stopped=False, timed_out=True)
+            with mock.patch.object(runner.window, "stream", return_value=timeout):
                 _, session = runner.run("sonnet", "without", "triage_ticket-04-1", SEAM,
                                         SEAM / "requests" / "04.md", Path(tmp) / "out")
         self.assertTrue(session["is_error"])
