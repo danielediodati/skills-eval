@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-SKILL = REPO / "a4a" / "skills" / "charter" / "SKILL.md"
+SKILL = REPO / "skills" / "a4a" / "skills" / "charter" / "SKILL.md"
 BRIEF = REPO / "trials" / "brief-auto-charter.md"
 FIRST_HEADING = "## What a charter is\n"
 FENCE = "```\n"

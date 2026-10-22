@@ -36,7 +36,7 @@ from run_trials import WORK_ROOT as TRIALS_WORK_ROOT
 KINDS = {
     "auto": TRIALS / "brief-auto-charter.md",
     "practice": TRIALS / "brief-practice-charter.md",
-    "reps": TRIALS.parent / "a4a" / "skills" / "charter" / "SKILL.md",
+    "reps": TRIALS.parent / "skills" / "a4a" / "skills" / "charter" / "SKILL.md",
 }
 DRAFTS = 3  # per seam and model, for "auto": one for each repeat of a request
 WORK_ROOT = TRIALS_WORK_ROOT / "charter-writer"

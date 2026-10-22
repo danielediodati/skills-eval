@@ -34,7 +34,7 @@ from pathlib import Path
 TRIALS = Path(__file__).resolve().parent
 SEAMS = TRIALS / "seams"
 CHARTERS = TRIALS / "charters"
-SETUP_SKILL = TRIALS.parent / "a4a" / "skills" / "setup" / "SKILL.md"
+SETUP_SKILL = TRIALS.parent / "skills" / "a4a" / "skills" / "setup" / "SKILL.md"
 # Written by an agent from the code, read by nobody. Session 3's four are at the top; the drafts of
 # "drafted", three per seam and model, are in <model>/<seam>-<n>.md.
 CHARTERS_AUTO = TRIALS / "charters-auto"

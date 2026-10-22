@@ -389,7 +389,7 @@ class RepsCharterWriter(unittest.TestCase):
             writer.WORK_ROOT = Path(tmp)
             work = writer.prepare_reps("E7", "planner", "opus", 1)
             self.assertEqual((work / "brief.md").read_text(encoding="utf-8"),
-                             (TRIALS.parent / "a4a" / "skills" / "charter" / "SKILL.md").read_text(encoding="utf-8"))
+                             (TRIALS.parent / "skills" / "a4a" / "skills" / "charter" / "SKILL.md").read_text(encoding="utf-8"))
             self.assertFalse((work / "evals").exists())
             self.assertTrue((work / "src" / "trainer" / "coach" / "planner.py").exists())
             prompt = writer.reps_prompt("E7", "planner")
