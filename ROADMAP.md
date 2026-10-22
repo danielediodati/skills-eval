@@ -18,6 +18,21 @@ Sessions 1 to 7 were made in `skills`, before the trials had a repository of the
 | 6 | `v0.6.0` | Haiku's rate beside Sonnet's, each with its intervals |
 | 7 | `v0.9.0` | REPS's drift replayed by the model that made it: 3 of 15 episodes drift with a charter against 10 of 15, and 4 of 6 asked moves are held back against 0 of 6 |
 
+## Session 8 - `0.2.0` - The move the user names, measured
+
+**Shows**: per case, the rule of 0.10.0 beside the rule of 0.11.0, on REPS's seven cases and on `extract_invoice 05`, `action_items 07` and `action_items 04`: the asked moves made and flagged, the episodes that drift, and whether the rule holds.
+
+1. **The runner stops at 80% of the usage window.** Read before each run, resumed in the next window - [ticket](docs/work/8-asked-move/issues/01-usage-window.md)
+2. **The protocol for the rule of 0.11.0.** Only `drafted` runs again; the decision rule fixed before the runs - [ticket](docs/work/8-asked-move/issues/02-protocol.md)
+3. **The rule of 0.11.0, run and read.** 30 runs, judged, calibrated with the user - [ticket](docs/work/8-asked-move/issues/03-runs-and-results.md)
+
+## Session 9 - `0.3.0` - The silent drift rate on 0.11.0
+
+**Shows**: Sonnet's and Haiku's silent drift rate with the charter on the rule of 0.11.0, beside 0.10.0's 2 and 1 of 48 and `without`'s 32 and 33, with intervals. Runs only if session 8's rule holds.
+
+1. **The protocol for `drafted` again, on 0.11.0.** Sixteen requests, two models, 96 runs - [ticket](docs/work/9-drafted-again/issues/01-protocol.md)
+2. **`drafted` on 0.11.0, run and read.** Each model's rate beside 0.10.0's - [ticket](docs/work/9-drafted-again/issues/02-runs-and-results.md)
+
 ## Parked
 
 No session yet.
