@@ -46,5 +46,5 @@ tests/                   the scripts' tests; no paid call
 2. **The rule that reads the result is fixed in the protocol,** with what counts as holding, failing and inconclusive. Two readings of one behaviour are reported side by side, never netted.
 3. **The judge is calibrated by the user, by confirmation,** never by hand labelling. The result names how many verdicts the user agreed with.
 4. **Every run is kept as the agent left it,** with its verdict and its cost. Nothing is deleted after it is read.
-5. **A result names the plugin tag it measured.** The submodule is moved to a new tag only by a session that measures that tag.
+5. **A result names the plugin commit it measured.** The submodule is moved to a new commit only by a feature that measures it; the plugin tags a version only once that measurement holds.
 6. **Nothing paid runs without a budget agreed with the user,** before the first paid call of a ticket. A run the plan's limit cuts short is spent and made again, so expensive runs go one at a time.

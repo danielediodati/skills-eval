@@ -1,4 +1,4 @@
-# `drafted` on 0.11.0, run and read
+# `drafted` on the final text, run and read
 
 Status: ready-for-agent
 Blocked by: 1
