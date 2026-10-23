@@ -1,7 +1,7 @@
 # The protocol for `drafted` again, on 0.11.0
 
 Status: ready-for-agent
-Blocked by: session 8, with its rule holding
+Blocked by: session 8, with its rule holding; and the plugin's map tickets on the inconsistencies and on the charter of a seam created during development, built in `skills`. Rewritten then for the final text, not 0.11.0 (the plugin's map, "Measure the final text").
 
 ## What it produces
 

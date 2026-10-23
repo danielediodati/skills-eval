@@ -1,6 +1,6 @@
 # Roadmap
 
-The order the measurements get made in. [CONTEXT.md](CONTEXT.md) holds the vocabulary and the practice; [openpoints.md](openpoints.md) holds what is still unmeasured. What the plugin does, and its own sessions, are in [skills](https://github.com/danielediodati/skills/blob/main/ROADMAP.md).
+The order the measurements get made in. [CONTEXT.md](CONTEXT.md) holds the vocabulary and the practice; the plugin's map ([skills](https://github.com/danielediodati/skills/blob/main/docs/work/map-drift-protection/map.md)) holds what is still to measure on the way to drift protection that holds. What the plugin does, and its own sessions, are in [skills](https://github.com/danielediodati/skills/blob/main/ROADMAP.md).
 
 A session is a milestone: it ends with a result that can be read. Its tickets are files under `docs/work/<session>-<name>/issues/`. A closed ticket is deleted and its line here is removed. A closed session becomes one row under *Done*; its tag keeps the details. A session that changes the plugin and measures it is two sessions, one per repository: the change first, in `skills`, then the measurement here, against the change's commit. The plugin's version ships only once the measurement holds (`skills`'s `AGENTS.md`).
 
@@ -26,7 +26,7 @@ Sessions 1 to 7 were made in `skills`, before the trials had a repository of the
 
 ## Session 9 - `0.3.0` - The silent drift rate on 0.11.0
 
-**Shows**: Sonnet's and Haiku's silent drift rate with the charter on the rule of 0.11.0, beside 0.10.0's 2 and 1 of 48 and `without`'s 32 and 33, with intervals. Runs only if session 8's rule holds.
+**Shows**: Sonnet's and Haiku's silent drift rate with the charter on the rule of 0.11.0, beside 0.10.0's 2 and 1 of 48 and `without`'s 32 and 33, with intervals. Runs only if session 8's rule holds, and on the final text the plugin's map settles, not on 0.11.0.
 
 1. **The protocol for `drafted` again, on 0.11.0.** Sixteen requests, two models, 96 runs - [ticket](docs/work/9-drafted-again/issues/01-protocol.md)
 2. **`drafted` on 0.11.0, run and read.** Each model's rate beside 0.10.0's - [ticket](docs/work/9-drafted-again/issues/02-runs-and-results.md)
