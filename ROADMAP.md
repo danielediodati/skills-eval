@@ -2,7 +2,7 @@
 
 The order the measurements get made in. [CONTEXT.md](CONTEXT.md) holds the vocabulary and the practice; [openpoints.md](openpoints.md) holds what is still unmeasured. What the plugin does, and its own sessions, are in [skills](https://github.com/danielediodati/skills/blob/main/ROADMAP.md).
 
-A session is a milestone: it ends with a result that can be read. Its tickets are files under `docs/work/<session>-<name>/issues/`. A closed ticket is deleted and its line here is removed. A closed session becomes one row under *Done*; its tag keeps the details. A session that changes the plugin and measures it is two sessions, one per repository: the change first, in `skills`, then the measurement here, against the tag the change shipped.
+A session is a milestone: it ends with a result that can be read. Its tickets are files under `docs/work/<session>-<name>/issues/`. A closed ticket is deleted and its line here is removed. A closed session becomes one row under *Done*; its tag keeps the details. A session that changes the plugin and measures it is two sessions, one per repository: the change first, in `skills`, then the measurement here, against the change's commit. The plugin's version ships only once the measurement holds (`skills`'s `AGENTS.md`).
 
 ## Done
 
