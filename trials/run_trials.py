@@ -271,7 +271,7 @@ def run(model, condition, trial_id, seam_dir, request, out):
         )},
     }
     if result.get("is_error"):
-        session["stderr"] = outcome.stderr[-2000:]
+        session["stderr"] = outcome.stderr[-2000:] or result.get("result")
     (out / "session.json").write_text(json.dumps(session, indent=2) + "\n", encoding="utf-8")
     return trial_id, session
 

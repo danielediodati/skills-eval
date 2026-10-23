@@ -320,6 +320,7 @@ class RepsCases(unittest.TestCase):
                 _, session = runner.run("sonnet", "without", "triage_ticket-04-1", SEAM,
                                         SEAM / "requests" / "04.md", Path(tmp) / "out")
         self.assertTrue(session["is_error"])
+        self.assertEqual(session["stderr"], "timeout")
 
 
 @unittest.skipUnless(HAS_REPS, "no REPS clone")
