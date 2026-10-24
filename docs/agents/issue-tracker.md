@@ -4,12 +4,12 @@ Issues for this repo are markdown files, versioned with the code. GitHub Issues 
 
 ## Layout
 
-- `ROADMAP.md` lists the milestones in order. A **milestone** is a release, declared before it is built, and numbered in order from 1: `## Milestone <m> - `<version>` - <title>`, its `**Shows**:` line, then its features. Only a milestone ships a version and a tag.
-- A **feature** is a result someone can watch, described by a spec, numbered inside its milestone: `### Feature <m>.<f> - <title>`, a `Spec:` line linking the spec, then a numbered list of its tickets, each linking its file. A feature ships no tag.
-- A **ticket** is numbered inside its feature, and named by the three numbers: `1.2.1` is ticket 1 of feature 2 of milestone 1.
+- `ROADMAP.md` lists, in order, the plugin's milestones this repository measures for. This repository has no milestones and no versions of its own: a **milestone** here is the plugin's, `## Milestone <m> - `<version>` - <title>` with the plugin's number and version, its `**Shows**:` line naming the measurement the release waits on, then the features that make it. When the plugin's milestone ships, this repository takes the same tag, on the commit holding the results it shipped on.
+- A **feature** is a result someone can watch, described by a spec, numbered inside its milestone in one sequence with the plugin's features of that milestone, each repository listing the other's: `### Feature <m>.<f> - <title>`, a `Spec:` line linking the spec, then a numbered list of its tickets, each linking its file. A feature ships no tag.
+- A **ticket** is numbered inside its feature, and named by the three numbers: `12.1.1` is ticket 1 of feature 1 of milestone 12.
 - `docs/work/<m>.<f>-<name>/spec.md` is the feature's spec, and `docs/work/<m>.<f>-<name>/issues/<nn>-<slug>.md` one of its tickets; the name after the number is only a label.
-- The rows under *Done* before milestone 1 are the plugin's sessions, made in `skills` before this repository existed; their numbers are the plugin's.
-- A ticket, feature or milestone of another repository is named with the repository first: `skills-eval` 1.2.1, `skills` 12.
+- The rows under *Done* are the plugin's milestones this repository measured for; rows 1 to 7 were made in `skills`, as sessions, before this repository existed.
+- A ticket, feature or milestone of another repository is named with the repository first: `skills-eval` 12.1.1, `skills` 12.
 
 ## A ticket
 

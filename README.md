@@ -5,7 +5,7 @@
 - **Synthetic seams**: four small agentic systems, sixteen requests, run with and without a charter on Sonnet and Haiku 5.5 ([results](trials/results-silent-drift-3.md)).
 - **REPS**: a real project's drift episodes, replayed by the model that made them ([results](trials/results-reps-replay.md)).
 
-The plugin is a submodule, `skills/`, pinned at the tag the results measured. [CONTEXT.md](CONTEXT.md) holds the trials' vocabulary and practice; [ROADMAP.md](ROADMAP.md) the sessions that made each result.
+The plugin is a submodule, `skills/`, pinned at the tag the results measured. [CONTEXT.md](CONTEXT.md) holds the trials' vocabulary and practice; [ROADMAP.md](ROADMAP.md) the plugin milestone each result was made for.
 
 | question | protocol | results |
 | --- | --- | --- |
