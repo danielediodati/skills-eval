@@ -1,0 +1,264 @@
+--- a/docs/work/14-this-workout/issues/04-this-workout-or-from-now-on.md
++++ b/docs/work/14-this-workout/issues/04-this-workout-or-from-now-on.md
+@@ -17,7 +17,8 @@
+ 
+ ## From ticket 03
+ 
+-- A refused `adapt_this_workout` comes back as *«That was not started: ... call it again put right, or ask them»*. Two refusals want different turns: row 8 (pull-ups on the legs day) names the workout's groups and should be called again with `workout`; row 16 names the exclusion and its re-test date and should be relayed, not retried.
++- A refused `adapt_this_workout` comes back as *«That was not started: ... call it again put right, or ask them»*. Row 16 names the exclusion and its re-test date and should be relayed, not retried.
++- Since 2026-10-02 an adaptation is not held to its slot's groups (planner charter): row 8 (pull-ups on the legs day) starts as asked. `workout` now only says which of the cycle's workouts this one counts as. Unset on *«niente gambe»*, the plan follows the words, but the legs slot is the one marked done.
+ - `TALKING` and the tool's docstring already say exercise ids come from `search_exercises`; the routing between the four destinations is still this ticket's.
+ 
+ ## Acceptance criteria
+--- a/evals/planner/charter.md
++++ b/evals/planner/charter.md
+@@ -14,7 +14,7 @@
+ - Whether to propose an exercise the user would rather not do, with a `despite` row saying why: a preference is not an exclusion, and the user answers by refusing.
+ - How a new proposal differs from the ones turned down: "how is the agent's business"; a rule on how different would be the validator deciding method.
+ - How to weigh the user's conclusions: given to the model with their quote as "none of it is a rule"; the admissible set is the same without them.
+-- What an adaptation keeps of the slot it starts from, beyond what was asked for and left out: "keep what still fits".
++- What an adaptation keeps of the slot it starts from, beyond what was asked for and left out, the groups it trains included: "keep what still fits", and what the user said comes first. The slot's groups reach the brief as a starting point, never the request. Moved from code on 2026-10-02, at the user's request (paraphrased): stop adding rules, they end in dead ends; the plan puts the user's will first. *«oggi faccio il core ma niente gambe»* had no legal plan on the legs day.
+ - How many cycles a mesocycle runs, and why: "That number is yours to choose" (ADR-0008).
+ 
+ ## Constrained
+@@ -22,7 +22,7 @@
+ - Today's constraints (`constraining_today`: exclusions, minutes, groups) are folded into the request once, before the brief: the schema and the validator must describe the same space.
+ - The plan lands within `TOLERANCE_MIN` = 5 minutes of the minutes asked for, either side, and is refused, never trimmed or padded (ADR-0001): a silent repair hides the arithmetic from the agent. The 5 is the rule's value; the prompt, the brief and `remaining_budget` all read the constant.
+ - An exercise appears at most once in a workout (across a mesocycle's workouts it may repeat): `plan_seconds` cannot cost a duplicate.
+-- Each group asked for gets an exercise whose primary muscles are in it, unless the admissible set has none (`untrained`): moved into the validator after it was the eval's only failure on Haiku (ADR-0011).
++- Each group asked for gets an exercise whose primary muscles are in it, unless the admissible set has none (`untrained`): moved into the validator after it was the eval's only failure on Haiku (ADR-0011). An adaptation asks for no groups, so its admissible set is not narrowed by the slot's.
+ - A preference prescribed without a `despite` row is refused, and a `despite` row for something the user never refused is refused: TRAINER.md's fourth invariant, *says so and asks*, made checkable.
+ - A plan equal to one already turned down is refused: the newest refusal compared whole, older ones by their exercise ids in order, because that is all the negotiation keeps of them (ADR-0007).
+ - An adaptation holds every exercise asked for and none left out; an exercise asked for outside the request's admissible set is refused before the model runs (`_admits`).
+--- a/src/trainer/cli.py
++++ b/src/trainer/cli.py
+@@ -1424,7 +1424,7 @@
+                 request = plan.adaptation_requested(connection, today, shaping)
+                 click.echo(
+                     f"adapting mesocycle workout {adapting.slot} of {adapting.slots}, "
+-                    f"cycle {adapting.cycle} of {adapting.cycles} -- {', '.join(request.groups)}"
++                    f"cycle {adapting.cycle} of {adapting.cycles} -- {', '.join(request.adapting.groups if request.adapting else ())}"
+                 )
+             else:
+                 assembled = plan.requested(connection, today, shaping)
+--- a/src/trainer/coach/planner.py
++++ b/src/trainer/coach/planner.py
+@@ -255,8 +255,12 @@
+     lines = [
+         f"This adapts workout {adapting.slot} of their mesocycle, which is "
+         "below, for this workout only. Start from it: keep what still fits and "
+-        "change only what they asked for. The mesocycle itself stays as it is.",
++        "change what they asked for. What they asked for comes first, the "
++        "groups this workout trains included: the slot is where you start, not "
++        "a limit. The mesocycle itself stays as it is.",
+     ]
++    if adapting.groups:
++        lines.append(f"Workout {adapting.slot} trains: {', '.join(adapting.groups)}.")
+     if adapting.said:
+         lines.append(f"They said: {adapting.said}")
+     if adapting.asked_for:
+--- a/src/trainer/plan.py
++++ b/src/trainer/plan.py
+@@ -258,10 +258,14 @@
+     left_out: tuple[str, ...] = ()
+     """Exercise ids this workout must not hold. Not an exclusion: nothing outlives the workout."""
+ 
++    groups: tuple[str, ...] = ()
++    """The groups the slot trains: where the plan starts, never checked against it."""
++
+     def __post_init__(self) -> None:
+         # A checkpoint reads tuples back as lists.
+         object.__setattr__(self, "asked_for", tuple(self.asked_for))
+         object.__setattr__(self, "left_out", tuple(self.left_out))
++        object.__setattr__(self, "groups", tuple(self.groups))
+ 
+ 
+ @dataclass(frozen=True)
+@@ -501,8 +505,9 @@
+ 
+     `asked.workout` is another of the cycle's workouts, one not yet performed
+     this cycle; `asked.equipment` is this workout's equipment in full;
+-    `asked.minutes` may exceed the declared cap. An exercise asked for is
+-    refused here when the request does not admit it.
++    `asked.minutes` may exceed the declared cap. The slot's groups are not
++    held: what this workout trains is what `said` asks for. An exercise asked
++    for is refused here when the request does not admit it.
+     """
+     if asked.groups:
+         raise PlanRejected(
+@@ -527,13 +532,11 @@
+     ).request
+     if asked.minutes is not None:
+         # This workout may run past the cap, which `requested` refuses.
+-        request = dataclasses.replace(
+-            request,
+-            budget_min=asked.minutes,
+-            allocation=_divided(asked.minutes, request.groups),
+-        )
++        request = dataclasses.replace(request, budget_min=asked.minutes)
+     request = dataclasses.replace(
+         request,
++        groups=(),
++        allocation=(),
+         adapting=Adapting(
+             mesocycle=found.mesocycle,
+             served_after=found.performed,
+@@ -542,6 +545,7 @@
+             said=said,
+             asked_for=tuple(dict.fromkeys(ask_for)),
+             left_out=tuple(dict.fromkeys(leave_out)),
++            groups=request.groups,
+         ),
+     )
+     _admits(connection, request, today)
+@@ -600,21 +604,9 @@
+             request.budget_min,
+             request.groups,
+         )
+-        elsewhere = ""
+-        if exercise_id in {
+-            exercise.id
+-            for exercise in admissible.admissible_set(
+-                connection, request.exclusions, request.equipment, request.budget_min
+-            )
+-        }:
+-            elsewhere = (
+-                "; for another of the cycle's workouts, give its number as "
+-                f"`workout`: the ones still to do are "
+-                f"{_still(connection, mesocycles.today(connection))}"
+-            )
+         raise PlanRejected(
+             f"{exercise_id} {why or 'is not admissible'}; an exercise asked for "
+-            f"has to be admissible in this workout{elsewhere}"
++            "has to be admissible in this workout"
+         )
+ 
+ 
+--- a/tests/test_adapt_this_workout.py
++++ b/tests/test_adapt_this_workout.py
+@@ -133,7 +133,7 @@
+     assert request.adapting.left_out == ("Barbell_Squat",)
+     assert request.adapting.asked_for == ("Romanian_Deadlift", "Split_Squat_with_Dumbbells")
+     assert "superset" in request.adapting.said
+-    assert (request.adapting.slot, request.groups) == (1, ("legs", "core"))
++    assert (request.adapting.slot, request.adapting.groups) == (1, ("legs", "core"))
+ 
+ 
+ def test_0b_you_choose_leaves_the_squat_out_and_asks_for_nothing(
+@@ -154,7 +154,7 @@
+ 
+     assert request.adapting is not None
+     assert request.adapting.slot == 2
+-    assert request.groups == ("chest", "shoulders", "arms")
++    assert request.adapting.groups == ("chest", "shoulders", "arms")
+ 
+ 
+ def test_3_a_borrowed_kettlebell_is_this_workouts_equipment_in_full(
+@@ -193,25 +193,12 @@
+     assert (request.budget_min, request.equipment) == (20, ("body only",))
+ 
+ 
+-def test_8_pull_ups_on_the_legs_day_are_refused_naming_the_workout(
+-    where: adapt_evaluation.Fixture,
+-) -> None:
++def test_8_pull_ups_on_the_legs_day_start(where: adapt_evaluation.Fixture) -> None:
+     said = entrance.startable(
+         entrance.ADAPT_THIS_WORKOUT, {"said": "oggi vorrei fare trazioni", "ask_for": ["Pullups"]}
+     )
+ 
+-    assert said is not None and "legs, core" in said
+-
+-
+-def test_8_the_refusal_names_the_workouts_still_to_do_by_number(
+-    where: adapt_evaluation.Fixture,
+-) -> None:
+-    said = entrance.startable(
+-        entrance.ADAPT_THIS_WORKOUT, {"said": "oggi vorrei fare trazioni", "ask_for": ["Pullups"]}
+-    )
+-
+-    assert said is not None
+-    assert "`workout`" in said and "3 (back, arms)" in said and "Call it again" in said
++    assert said is None
+ 
+ 
+ def test_8_pull_ups_on_the_back_workout_are_asked_for(where: adapt_evaluation.Fixture) -> None:
+--- a/tests/test_plan.py
++++ b/tests/test_plan.py
+@@ -1174,8 +1174,9 @@
+         connection, TODAY, plans.Asked(minutes=30), said="solo 30 minuti oggi"
+     )
+ 
+-    assert (asked.budget_min, asked.groups) == (30, ("legs",))
++    assert (asked.budget_min, asked.groups, asked.allocation) == (30, (), ())
+     assert asked.adapting is not None
++    assert asked.adapting.groups == ("legs",)
+     assert asked.adapting.workout == plans.WorkoutPlan.model_validate(squat_day())
+     assert (asked.adapting.mesocycle, asked.adapting.served_after) == (identifier, 0)
+     assert asked.adapting.said == "solo 30 minuti oggi"
+@@ -1225,7 +1226,7 @@
+         plan = squats(rounds)
+         return [v for v in plans.validate(connection, plans.to_blocks(plan), asked, plan) if v.rule == plans.BUDGET]
+ 
+-    assert (asked.budget_min, asked.allocation) == (70, (("legs", 70),))
++    assert asked.budget_min == 70
+     assert budget(seventy) == []
+     assert budget(seventy // 2) != []
+ 
+@@ -1237,8 +1238,8 @@
+ 
+     asked = plans.adaptation_requested(connection, TODAY, plans.Asked(workout=2), said="oggi niente gambe")
+ 
+-    assert asked.groups == ("shoulders",)
+     assert asked.adapting is not None and asked.adapting.slot == 2
++    assert asked.adapting.groups == ("shoulders",)
+     assert asked.adapting.workout == plans.WorkoutPlan.model_validate(press_day())
+ 
+ 
+@@ -1305,14 +1306,41 @@
+         plans.adaptation_requested(connection, TODAY, ask_for=("Plank",), leave_out=("Plank",))
+ 
+ 
+-def test_an_exercise_asked_for_outside_the_workout_is_refused_saying_why(
+-    connection: sqlite3.Connection, declaring_legs: Path
+-) -> None:
+-    """Asking never widens the admissible set: a press on the legs day names the groups."""
++def test_an_exercise_asked_for_outside_the_slots_groups_is_taken(
++    connection: sqlite3.Connection, declaring_legs: Path
++) -> None:
++    """A press on the legs day: the slot is where the plan starts, not a limit."""
+     kept(connection)
+ 
+-    with pytest.raises(plans.PlanRejected, match="today's workout is legs"):
+-        plans.adaptation_requested(connection, TODAY, ask_for=("Standing_Military_Press",))
++    asked = plans.adaptation_requested(connection, TODAY, ask_for=("Standing_Military_Press",))
++
++    assert asked.adapting is not None
++    assert asked.adapting.asked_for == ("Standing_Military_Press",)
++
++
++def test_an_adaptation_that_skips_the_slots_groups_is_not_refused_for_it(
++    connection: sqlite3.Connection, declaring_legs: Path
++) -> None:
++    """«oggi faccio il core ma niente gambe» on the legs day: a core-only plan."""
++    kept(connection)
++    asked = plans.adaptation_requested(
++        connection, TODAY, said="oggi faccio il core ma niente gambe"
++    )
++    plank = document(block({"exercise_id": "Plank", "prescription": {"unit": "seconds", "amount": 30}}))
++
++    assert not {plans.UNTRAINED, plans.ADMISSIBLE} & set(rules(connection, asked, plank))
++
++
++def test_an_exercise_asked_for_outside_this_workouts_equipment_is_refused_saying_why(
++    connection: sqlite3.Connection, declaring_legs: Path
++) -> None:
++    """Asking never widens the admissible set: a barbell squat in a bodyweight workout."""
++    kept(connection)
++
++    with pytest.raises(plans.PlanRejected, match="has to be admissible"):
++        plans.adaptation_requested(
++            connection, TODAY, plans.Asked(equipment=("body only",)), ask_for=("Barbell_Squat",)
++        )
+ 
+ 
+ def test_an_exercise_asked_for_under_an_exclusion_names_it_and_its_retest(

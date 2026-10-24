@@ -1,0 +1,79 @@
+--- a/evals/planner/charter.md
++++ b/evals/planner/charter.md
+@@ -17,6 +17,7 @@
+ - How a new proposal differs from the ones turned down: what makes the second plan better is the agent's business; code refuses only a repeat.
+ - How much weight the user's conclusions get: they are context, not rules, and the admissible set is the same without them.
+ - In an adaptation, everything beyond `asked_for` and `left_out` (a superset, *one more per group*, *you choose*): kept as prose for the planner (spec 14).
++- In an adaptation, which of the slot's groups this workout trains: the user, 2026-10-02, after *«oggi faccio il core ma niente gambe»* dead-ended on the group rule: *stop adding rules, the plan puts the user's will first*.
+ - In a mesocycle change, what to keep and what to rewrite for the cycles left.
+ - How many cycles a mesocycle repeats for, and the sentence why (ADR-0008): the prompt says the number is the model's.
+ - Which tools to call, in what order, and when to stop calling and emit: the budget bounds it, the model spends it.
+@@ -37,7 +38,7 @@
+ - The plan runs within `TOLERANCE_MIN` = 5 minutes either side of the minutes asked, short as surely as over: the rule is the window; 5 is today's width, written once in `plan.py` and quoted to the model.
+ - A plan that does not fit is refused, never trimmed or padded: a silent repair hides the arithmetic error from the agent (ADR-0001).
+ - No exercise twice in one workout; the same exercise may appear in two workouts of a mesocycle.
+-- Every group asked for has an exercise whose primary muscles are in it, unless today's admissible set has none: moved into the validator after Haiku passed it and the eval did not (ADR-0011).
++- Every group asked for has an exercise whose primary muscles are in it, unless today's admissible set has none: moved into the validator after Haiku passed it and the eval did not (ADR-0011). Not in an adaptation, where it is free (above).
+ - A `despite` row names only an exercise the user actually said no to, and a preferred-against exercise without one is refused: silence is the failure, not the choice.
+ - A plan equal to one already turned down is refused: the newest refusal compared whole, earlier ones by their exercise ids in order, because only the ids are kept of them.
+ - In an adaptation, every `asked_for` id is held and no `left_out` id is: the fields code can check (spec 14); asking never widens the admissible set, and an excluded id is refused before the run.
+--- a/src/trainer/coach/planner.py
++++ b/src/trainer/coach/planner.py
+@@ -179,7 +179,14 @@
+     ]
+     if request.goal is not None:
+         lines.append(aimed(request.goal))
+-    if request.groups:
++    if request.groups and request.adapting is not None:
++        lines.append(
++            f"The workout being adapted trains: {', '.join(request.groups)}. Ask "
++            "`admissible_set` for those groups. Which of them this workout "
++            "trains is what they said: when they want one of them left out "
++            "today, leave it out."
++        )
++    elif request.groups:
+         lines.append(
+             f"This workout trains: {', '.join(request.groups)}. Ask "
+             "`admissible_set` for those groups; anything else is not today's "
+--- a/src/trainer/plan.py
++++ b/src/trainer/plan.py
+@@ -995,7 +995,11 @@
+ def every_group_trained(
+     connection: sqlite3.Connection, plan: WorkoutPlan, request: Request
+ ) -> Violation | None:
+-    """Every group asked for has an exercise whose primary muscles are in it, unless today's admissible set has none."""
++    """Every group asked for has an exercise whose primary muscles are in it, unless today's admissible set has none or the plan adapts a workout."""
++    if request.adapting is not None:
++        # The slot's groups are where an adaptation starts, not what it must
++        # hold: «il core ma niente gambe» on a legs and core day is the user's.
++        return None
+     prescribed = set(exercise_ids(plan))
+     available = admissible.admissible_set(
+         connection,
+--- a/tests/test_plan.py
++++ b/tests/test_plan.py
+@@ -615,6 +615,24 @@
+     assert plans.every_group_trained(connection, SQUAT_ONLY, legs_and_chest) is None
+ 
+ 
++def test_an_adaptation_may_leave_out_a_group_of_its_workout(
++    connection: sqlite3.Connection,
++) -> None:
++    """«Oggi faccio il core ma niente gambe» on a legs and core day: what they said comes first."""
++    legs_and_core = dataclasses.replace(
++        plans.Request(equipment=("barbell", "body only"), budget_min=45, groups=("legs", "core")),
++        adapting=plans.Adapting(
++            mesocycle=1,
++            served_after=0,
++            slot=1,
++            workout=SQUAT_ONLY,
++            said="oggi faccio il core ma niente gambe",
++        ),
++    )
++
++    assert plans.every_group_trained(connection, SQUAT_ONLY, legs_and_core) is None
++
++
+ # -- the preferences, and the plan you turned down ----------------------------
+ 
+ 

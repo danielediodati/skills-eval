@@ -28,7 +28,8 @@ Spec: [trials/protocol-asked-move.md](trials/protocol-asked-move.md)
 
 Per case, the rule of 0.10.0 beside the rule of 0.11.0, on REPS's seven cases and on `extract_invoice 05`, `action_items 07` and `action_items 04`: the asked moves made and flagged, the episodes that drift, and whether the rule holds.
 
-3. **The rule of 0.11.0, run and read.** 30 runs, judged, calibrated with the user - [ticket](docs/work/asked-move/issues/03-runs-and-results.md)
+Every ticket is closed; the result is [trials/results-asked-move.md](trials/results-asked-move.md): the rule of 0.11.0 holds.
+
 
 ### Feature `drafted-again` - The silent drift rate on the final text
 

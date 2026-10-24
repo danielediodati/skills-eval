@@ -1,0 +1,84 @@
+--- /dev/null
++++ b/docs/work/09-the-report-in-the-chat/issues/06-the-contract-not-the-reading.md
+@@ -0,0 +1,81 @@
++# The log pass is held back by the contract, not by the reading
++
++Status: ready-for-agent
++
++The first log pass on the graph held **24 of 90** on `gpt-oss:20b` (`b520008`). Rescored on the document the engine would actually write, the 50 valid determined runs go from **7 to 30** held. The model is reading the reports; it is failing a contract that three different files state three different ways.
++
++Four causes, each one checkable without a model.
++
++| # | cause | where |
++|---|---|---|
++| 1 | the scorer compares the emitted document, the engine writes a different one | `log_evaluation._difference` |
++| 2 | the prompt forbids `assumed`; the shape forces a value and the set expects `assumed` on it | `coach/logger.py:127-128` |
++| 3 | the exclusion vocabulary is nowhere in the context | `coach/logger.LOGGING`, `exclusions.classify` |
++| 4 | a refusal ends the run | charter, *Constrained* — **not in this ticket**, see below |
++
++## 1. Score the document the engine would write
++
++`_difference` compares two `log.PerformedWorkout`s field by field, including `len(got.blocks) != len(expected.blocks)`. `_produced`, two lines later, costs the volume off `log.to_performed`. So the same run is judged against two different objects, and the one the document check uses is not the one that reaches SQLite.
++
++A document that restates the three prescribed blocks as `assumed` and one that leaves `blocks` empty resolve, through `to_performed`, to the same tuple of `workouts.PerformedBlock`. `_filled` already says so in its own docstring, which is why false confidence is read off the provenance and never off the block count. The document check is the only place in the suite that still counts blocks.
++
++- **Resolve both sides through `log.to_performed`**, against the fixture, and compare the resolved blocks. The expected document goes through it too: the set's rows are unchanged and are not what moves.
++- **`workout_id`, `report` and `proposed_exclusion` stay on the emitted document.** They do not survive `to_performed`, and `report` word for word is the one thing in the suite that scores the user's own words (charter, *Free*).
++- **Keep the volume check.** It fails differently — the catalog's patterns and muscles, not the blocks — and two checks on one object are still two checks.
++- **Report the restating, do not charge for it.** See *The judgement call*.
++
++## 2. The prompt forbids what the shape requires and the set expects
++
++`tools.strict_schema` makes every property required, so `PerformedBlock` carries `rounds`, `rounds_source`, `rest`, `rest_source` and `PerformedItem` carries `unit`, `amount`, `amount_source` the moment a block is mentioned at all. Report *"di militari solo 2 serie"* and the reps and the rest have to be written down, and the user gave neither.
++
++The set says what to write: U2 expects `"amount": 10, "amount_source": "assumed"` and `"rest": 120, "rest_source": "assumed"`. `log.validate` accepts exactly that — `_nothing_assumed_the_prescription_does_not_say` refuses only a contradiction, and `_nothing_assumed_without_a_prescription` only a document with no prescription behind it. The prompt is the one file that disagrees, and it disagrees with itself: line 128 says *Never `assumed`*, line 133 says *a number marked `assumed` has to be the prescribed one*.
++
++- **Delete *Never `assumed`*** and keep the rule that follows it. A value copied out of the prescription into a block the report does mention is `assumed` at the prescribed value.
++- **Keep the two rules the validator enforces**, stated as the validator states them: never `assumed` on a load anywhere, never `assumed` when `workout_id` is null. Both are refusals today and both end the run.
++- **Keep *emit only what deviated*.** It is still the cheapest right answer and it is what U1 expects; this bullet is about the block the model does mention.
++- No change to `PerformedBlock` or `strict_schema`. The copied value is what the set wants emitted, so there is nothing for an optional field to buy.
++
++## 3. Put the exclusion vocabulary in the context
++
++`exclusions.classify` resolves a proposed value against twelve movement patterns (`catalog.values(connection, "movement_pattern")`) and seven loaded joints (`catalog.joint_values`). The model is shown two of the nineteen, as examples inside a sentence, and a value that matches none of them comes back from `_the_exclusion_it_proposes` as a `LogRejected` — which ends the run (cause 4). Of the three causes this ticket fixes, this is the one that turns into a refusal, and it is the only lever on refusals available without moving a charter line.
++
++- **Read both vocabularies from the data and put them in the brief**, when the opening messages are built, through `tools.opened()` — so the fixture `TRAINER_DB` names is the one that is read. Never a constant: the hand-copied equipment list was wrong in three places.
++- **As text in the brief, not as an `enum` on `proposed_exclusion.value`.** The planner restricts `exercise_id` to today's admissible ids and that is its charter's business; here *which movement or joint it names* is the model's (charter, *Free*). A closed menu on the wire takes it. A list it can read informs it.
++- **Not a seventh tool.** The surface is six, named, in `TOOLS` (charter, *Constrained*).
++- **No granularity on the wire** — still `classify`'s, still read off the catalog.
++
++## 4. Re-run the pass
++
++- `trainer eval --suite log`, on `gpt-oss:20b`, against the fixture `prepared` builds, with the number written into this ticket and the drop reported per row.
++- **This run is local and free.** If it is run on Groq instead — for speed, or to separate the model from the contract the way session 11 item 1 does for the planner — agree one budget with the user first, before the first call.
++- Run the unit tests and a dry scoring pass over a hand-written emission before spending a single model call.
++
++## What is not in this ticket
++
++- **The refusal that ends the run.** The planner's validator goes back to the planner; the logger's does not, and the charter says so in words: *A refusal ends the run. There is no repair turn… The model is not given a second attempt at the same report.* That is a constrained line and the request does not name moving it, so it stays. It costs 4 of the 54 determined runs today; fixing cause 3 removes one of the two ways a document earns a refusal, and the re-run will say what is left.
++- **Any edit to `docs/logging/eval-set.md`.** The set was written blind and a row that is hard to hold is a finding, not a row to soften.
++- **Any edit to `evals/logger/charter.md`.** Nothing here moves a line: causes 1 and 3 are code, cause 2 brings the prompt back to what the charter and the validator already say.
++
++## The judgement call
++
++The set says, in its own words: *An expected document that restates the unchanged parts is wrong about what the agent should emit*, and U1's note calls restating the prescription *the commonest wrong answer here*. Scoring on the resolved document stops charging for it.
++
++The resolution is to **report it and not charge it**: a run that restated blocks the engine would have filled gets a note on its row saying how many, and holds. What reaches the user is identical either way, and the charter's *the model never restates the unchanged parts* stays visible in the report instead of being priced into a number nobody can decompose.
++
++If the user would rather it stayed a failure, this is the line to say so on — it is one branch in the scorer either way.
++
++## Acceptance criteria
++
++- [ ] `trainer eval --suite log` has been run on `gpt-oss:20b` after the three fixes, and the number is written down here, with the drop per row.
++- [ ] A document that restates the prescription as `assumed` and one with empty `blocks` score the same, and the first carries the note.
++- [ ] A U2-shaped emission — the deviating `rounds` `reported`, the copied reps and rest `assumed` — holds, and `log.validate` passes it.
++- [ ] The brief lists the twelve patterns and seven joints, read out of the fixture: the test asserts against `catalog.values` and `catalog.joint_values`, never against a literal list.
++- [ ] `proposed_exclusion.value` has no `enum` in the emit schema, and `TOOLS` still holds six names.
++- [ ] `docs/logging/eval-set.md` and `evals/logger/charter.md` are untouched.
++- [ ] The full test suite and mypy are green.
++
++## Comments
++
++**Ticket 05 stays open and closes on this re-run.** It asked for the pass and for *whatever that pass says about the prompt*; the pass happened and this is what it said. Merging the two into one ticket is the user's call — the acceptance criteria above subsume 05's except for the `interrupt()` one, which the pass has already satisfied.
++
++**Cause 2 was found once before, from the other side.** `_nothing_assumed_the_prescription_does_not_say` carries a docstring beginning *Found by running the agent*, about a model that emitted `amount: 8, amount_source: "assumed"` against a prescription of 10. The rule written then was right and narrow — only a contradiction is refused. The prompt was written as if it were total.

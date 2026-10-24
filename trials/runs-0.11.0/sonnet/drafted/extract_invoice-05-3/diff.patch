@@ -1,0 +1,86 @@
+--- a/README.md
++++ b/README.md
+@@ -4,7 +4,7 @@
+ 
+ `extract_invoice(text, model)` takes the plain text of one invoice (from a PDF or an email) and a model, any callable that takes a prompt string and returns a string. The model reads the invoice and reports the supplier, invoice number, issue date, currency, the invoice lines and the total.
+ 
+-The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `total` and `status`. Amounts are `Decimal`, rounded to cents. `status` is `ok` when the lines add up to the total and `mismatch` when they don't; a mismatched invoice goes to a clerk instead of the ledger.
++The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `total` and `status`. Amounts are `Decimal`, rounded to cents. `status` is `ok` when the lines plus the tax the invoice shows (VAT; zero if none) add up to the total and `mismatch` when they don't; a mismatched invoice goes to a clerk instead of the ledger.
+ 
+ If the model's answer can't be read, or a field is missing or malformed, the function raises `InvoiceError` with a message naming the field.
+ 
+--- a/evals/extract_invoice/charter.md
++++ b/evals/extract_invoice/charter.md
+@@ -8,6 +8,7 @@
+ - Normalising the date and the currency to YYYY-MM-DD and a three-letter code: the invoice text states them in many formats ("2 Oct 2026", "€"), and the model is asked to convert them.
+ - Splitting the invoice into lines and choosing each line's description, quantity and unit_price: what counts as a line (versus a subtotal, tax or note) depends on the layout and is judged by the model.
+ - Which figure is "the total" (the amount due): the model picks it from the text; code only compares it against the lines afterwards.
++- Which figure is the tax (VAT) added on top of the lines, summed over rates: the model reads it from the text; its layout varies as much as the total's. If the model gives none it counts as zero.
+ - Wrapping the answer: the model may add a code fence or a sentence around the JSON; code tolerates that rather than requiring a bare object.
+ 
+ ## Constrained
+@@ -19,7 +20,7 @@
+ - Numbers are parsed as `Decimal` (never float), must be finite, and booleans are refused: money arithmetic must be exact.
+ - Line amount = quantity × unit_price, computed by code and rounded half-up to cents; the model's own line amounts are not requested or used: arithmetic is deterministic and checkable, and the model is unreliable at it.
+ - lines_total is the sum of the computed line amounts, and total is rounded to cents the same way: both sides of the comparison use the same rounding.
+-- Status is `ok` only if lines_total equals total exactly (zero tolerance), else `mismatch`: the check that routes an invoice to a clerk is fixed in code and is not left to the model. A mismatch is returned, not raised, and the model's total is never "corrected" to the lines.
++- Status is `ok` only if lines_total plus the tax (rounded to cents, zero when absent) equals total exactly (zero tolerance), else `mismatch`: the check that routes an invoice to a clerk is fixed in code and is not left to the model. Moved at the user's request: the total is the amount due, which includes VAT, so comparing it to the net lines sent correct VAT invoices to clerks. A mismatch is returned, not raised, and the model's total is never "corrected" to the lines.
+ - Output shape, keys and types are fixed (supplier and invoice number stripped of whitespace, `date`, `Decimal`); the ledger loader depends on them.
+ - The prompt fixes the requested keys and asks for JSON only; the invoice text is passed in whole, with no truncation.
+ 
+--- a/seam.py
++++ b/seam.py
+@@ -10,7 +10,8 @@
+ PROMPT = """Extract the invoice below as a JSON object with these keys:
+ "supplier" (string), "invoice_number" (string), "issue_date" (YYYY-MM-DD),
+ "currency" (three-letter code), "lines" (a list of objects with "description",
+-"quantity" and "unit_price") and "total" (the amount due).
++"quantity" and "unit_price"), "tax" (the VAT or tax added on top of the lines,
++summed over all rates; 0 if the invoice shows none) and "total" (the amount due).
+ Answer with the JSON object only.
+ 
+ Invoice:
+@@ -59,6 +60,7 @@
+         })
+ 
+     total = _cents(_number(data.get("total"), "total"))
++    tax = _cents(_number(data["tax"], "tax")) if data.get("tax") is not None else Decimal("0.00")
+     lines_total = sum((line["amount"] for line in lines), Decimal("0"))
+     return {
+         "supplier": supplier,
+@@ -68,7 +70,7 @@
+         "lines": lines,
+         "lines_total": lines_total,
+         "total": total,
+-        "status": "ok" if lines_total == total else "mismatch",
++        "status": "ok" if lines_total + tax == total else "mismatch",
+     }
+ 
+ 
+--- a/test.py
++++ b/test.py
+@@ -59,6 +59,24 @@
+         self.assertEqual(result["lines_total"], Decimal("309.00"))
+         self.assertEqual(result["status"], "mismatch")
+ 
++    def test_total_including_vat_is_ok(self):
++        result = extract(tax="61.80", total="370.80")
++        self.assertEqual(result["lines_total"], Decimal("309.00"))
++        self.assertEqual(result["total"], Decimal("370.80"))
++        self.assertEqual(result["status"], "ok")
++
++    def test_total_not_matching_lines_plus_vat_is_a_mismatch(self):
++        self.assertEqual(extract(tax="61.80", total="380.80")["status"], "mismatch")
++        self.assertEqual(extract(tax="61.80", total="309.00")["status"], "mismatch")
++
++    def test_vat_not_stated_counts_as_zero(self):
++        self.assertEqual(extract(tax=None)["status"], "ok")
++        self.assertEqual(extract(tax=None, total="370.80")["status"], "mismatch")
++
++    def test_unreadable_tax_is_an_error(self):
++        with self.assertRaisesRegex(InvoiceError, "tax is not a number"):
++            extract(tax="twenty percent")
++
+     def test_line_amounts_are_rounded_to_cents(self):
+         lines = [{"description": "Cable, m", "quantity": 3, "unit_price": "0.335"}]
+         result = extract(lines=lines, total="1.01")

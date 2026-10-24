@@ -1,0 +1,91 @@
+--- a/README.md
++++ b/README.md
+@@ -4,7 +4,7 @@
+ 
+ `extract_invoice(text, model)` takes the plain text of one invoice (from a PDF or an email) and a model, any callable that takes a prompt string and returns a string. The model reads the invoice and reports the supplier, invoice number, issue date, currency, the invoice lines and the total.
+ 
+-The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `total` and `status`. Amounts are `Decimal`, rounded to cents. `status` is `ok` when the lines add up to the total and `mismatch` when they don't; a mismatched invoice goes to a clerk instead of the ledger.
++The function returns a dict with `supplier`, `invoice_number`, `issue_date` (a `date`), `currency` (three capital letters), `lines` (each with `description`, `quantity`, `unit_price` and the computed `amount`), `lines_total`, `tax` (the VAT shown on the invoice, 0 if none), `total` and `status`. Amounts are `Decimal`, rounded to cents. `status` is `ok` when the lines plus tax add up to the total and `mismatch` when they don't; a mismatched invoice goes to a clerk instead of the ledger.
+ 
+ If the model's answer can't be read, or a field is missing or malformed, the function raises `InvoiceError` with a message naming the field.
+ 
+--- a/evals/extract_invoice/charter.md
++++ b/evals/extract_invoice/charter.md
+@@ -1,7 +1,7 @@
+ # extract_invoice charter
+ 
+ Input: the plain text of one supplier invoice (from a PDF or an email), and a model callable (prompt string in, string out).
+-Output: a dict with supplier, invoice_number, issue_date (`date`), currency, lines (description, quantity, unit_price, computed amount), lines_total, total (all `Decimal`, cents) and status `ok`/`mismatch`; or an `InvoiceError` naming the field.
++Output: a dict with supplier, invoice_number, issue_date (`date`), currency, lines (description, quantity, unit_price, computed amount), lines_total, tax, total (all `Decimal`, cents) and status `ok`/`mismatch`; or an `InvoiceError` naming the field.
+ 
+ ## Free
+ - Reading the invoice layout: which text is the supplier, the invoice number, the issue date, the currency, each line and the amount due, across any layout, language or wording; code cannot parse unforeseen invoice formats.
+@@ -20,7 +20,7 @@
+ - Line description: optional; blank is allowed and trimmed.
+ - Money arithmetic: line `amount` = quantity × unit_price, computed by code and rounded half-up to cents per line; the model never supplies amounts. Reason: the model's arithmetic is not trusted and the rounding rule must be reproducible.
+ - `lines_total` is the sum of the rounded line amounts; `total` is rounded half-up to cents.
+-- Status: `ok` only if `lines_total == total` exactly, with no tolerance; otherwise `mismatch`. This is a decision in code, not the model's judgement, so a mismatched invoice goes to a clerk and never to the ledger.
++- Status: `ok` only if `lines_total + tax == total` exactly, with no tolerance; otherwise `mismatch`. This is a decision in code, not the model's judgement, so a mismatched invoice goes to a clerk and never to the ledger. `tax` is the VAT/sales-tax amount the model reads from the invoice (summed if several; absent means 0), rounded half-up to cents; code only adds it, it does not check it against a rate. Moved at the user's request: lines are net of VAT, so correct invoices with VAT were flagged as mismatches and buried the real errors in the clerks' review pile.
+ - A mismatch is a result, not an error: the record is returned in full with status `mismatch`, so the clerk can see both figures. Only unreadable or malformed answers raise.
+ - No retry and no second opinion: a bad answer fails at once with `InvoiceError`; the caller decides what to do.
+ - Model contract: the model is injected as a plain callable, so the seam stays testable without a live model.
+--- a/seam.py
++++ b/seam.py
+@@ -10,7 +10,8 @@
+ PROMPT = """Extract the invoice below as a JSON object with these keys:
+ "supplier" (string), "invoice_number" (string), "issue_date" (YYYY-MM-DD),
+ "currency" (three-letter code), "lines" (a list of objects with "description",
+-"quantity" and "unit_price") and "total" (the amount due).
++"quantity" and "unit_price") and "tax" (the VAT or sales tax amount shown on the invoice, summed if there are
++several; omit it or use 0 if the invoice shows none) and "total" (the amount due).
+ Answer with the JSON object only.
+ 
+ Invoice:
+@@ -59,6 +60,8 @@
+         })
+ 
+     total = _cents(_number(data.get("total"), "total"))
++    raw_tax = data.get("tax")
++    tax = Decimal("0.00") if raw_tax is None else _cents(_number(raw_tax, "tax"))
+     lines_total = sum((line["amount"] for line in lines), Decimal("0"))
+     return {
+         "supplier": supplier,
+@@ -67,8 +70,9 @@
+         "currency": currency,
+         "lines": lines,
+         "lines_total": lines_total,
++        "tax": tax,
+         "total": total,
+-        "status": "ok" if lines_total == total else "mismatch",
++        "status": "ok" if lines_total + tax == total else "mismatch",
+     }
+ 
+ 
+--- a/test.py
++++ b/test.py
+@@ -59,6 +59,25 @@
+         self.assertEqual(result["lines_total"], Decimal("309.00"))
+         self.assertEqual(result["status"], "mismatch")
+ 
++    def test_total_with_tax_matching_the_lines_is_ok(self):
++        result = extract(tax="61.80", total="370.80")
++        self.assertEqual(result["lines_total"], Decimal("309.00"))
++        self.assertEqual(result["tax"], Decimal("61.80"))
++        self.assertEqual(result["status"], "ok")
++
++    def test_no_tax_is_zero(self):
++        self.assertEqual(extract()["tax"], Decimal("0.00"))
++
++    def test_total_with_tax_not_adding_up_is_a_mismatch(self):
++        self.assertEqual(extract(tax="61.80", total="371.80")["status"], "mismatch")
++
++    def test_tax_ignored_by_the_model_leaves_a_mismatch(self):
++        self.assertEqual(extract(total="370.80")["status"], "mismatch")
++
++    def test_unreadable_tax_is_an_error(self):
++        with self.assertRaisesRegex(InvoiceError, "tax is not a number"):
++            extract(tax="twenty percent")
++
+     def test_line_amounts_are_rounded_to_cents(self):
+         lines = [{"description": "Cable, m", "quantity": 3, "unit_price": "0.335"}]
+         result = extract(lines=lines, total="1.01")

@@ -1,0 +1,145 @@
+--- /dev/null
++++ b/docs/work/09-the-report-in-the-chat/issues/06-the-contract-not-the-reading.md
+@@ -0,0 +1,142 @@
++# The contract the logger emits against, not the reading
++
++Status: needs-triage
++
++Blocked by: nothing. Blocks 05 — see § Order.
++
++The first log pass on the graph held **24 of 90** on `gpt-oss:20b`. Of the 54
++determined runs, 50 produced a valid document and **7** held; rescored on the
++document the engine would write, **30** of those 50 hold. The failures are
++mostly the contract between the form, the prompt and the scorer — not the
++model's reading of the sentence.
++
++**Read first**: `evals/logger/charter.md` (the seam), `docs/logging/eval-set.md`
++(the thirty rows), CLAUDE.md § Stochastic seams, ADR-0004, CONTEXT.md on
++*adherence* and the three provenances.
++
++## What the pass found
++
++| # | where | what is wrong |
++|---|---|---|
++| 1 | `tools.strict_schema` (`tools.py:587`) over `log.PerformedBlock` | every property is required, so a value the user never gave has to be copied out of the prescription and labelled |
++| 2 | `coach/logger.py:128` against `:133-136` | the prompt forbids `assumed` in one bullet and calls it the honest label in the next; the set and the validator expect the second |
++| 3 | the brief | the exclusion vocabulary is nowhere in the context, and `classify` wants a catalog value character for character (`lumbar spine`) |
++| 4 | `log_evaluation._difference` (`:562`) | the document is compared as emitted, while the volume beside it is already compared as resolved (`_produced`, `:392`) |
++
++1 and 2 are one defect: the form forces the model to fill in what the charter's
++Free list says it must leave out ("A value nobody gave is left out, never filled
++in"), and the prompt then contradicts itself about how to label the fill.
++
++## What to build
++
++### 1. The emitted form may leave out a value nobody gave
++
++- `amount`/`amount_source` on `PerformedItem` and `rounds`/`rounds_source`,
++  `rest`/`rest_source` on `PerformedBlock` become nullable. Nullable and still
++  required by `strict_schema`, so constrained decoding is unchanged: *null* is
++  the model saying *they did not tell me*, which it cannot say today.
++- `to_performed`/`_reported` (`log.py:750`, `:859`) fill a null from the block
++  `_paired` matched, marked `assumed` — the same fill that already brings a
++  whole unmentioned block through, one level finer.
++- A null nothing can fill — an unpaired block, or no `workout_id` at all — is
++  the shape error it already is today, moved from pydantic into a sentence that
++  names the field. No new kind of refusal and nothing new on the charter's
++  closed list; if the implementation turns out to need one, that is a line to
++  raise rather than take.
++- `trainer log --from FILE` resolves a hand-written document with gaps the same
++  way, and `render` already prints resolved blocks.
++
++### 2. The prompt says one thing about `assumed`
++
++The code's rule, stated once: a value the user did not give is **left out** where
++the block deviates from a prescribed one, and `assumed` stays the label for a
++value carried across where the plan is silent — a substitution, a block nobody
++prescribed (`log.py:519-527` is the reasoning, and U6 is the row). Delete the
++flat *never `assumed`* bullet; keep "never write an id you remember" as it is.
++
++### 3. The exclusion vocabulary comes from the catalog
++
++- The twelve patterns and the seven joints, read with `catalog.values` and
++  `catalog.joint_values` — never a constant (CLAUDE.md § standing rules, and
++  `catalog.values`' own docstring on what the last hand-copied vocabulary
++  missed).
++- Read in the node that assembles the opening, through `tools.opened()` like
++  `validate` and `confirm` do, so the fixture named by `TRAINER_DB` is what it
++  reads. Once per run, not per turn, and into `brief` rather than `LOGGING`:
++  the system prompt is a module constant and cannot read a database.
++- It is the catalog's two lists under their own names, not a menu of what to
++  propose. Whether to propose an exclusion at all, and which value, stay the
++  model's; the set is already closed by `classify`, and this only lets the
++  model hit it.
++- **This one cuts both ways and the pass has to say so per row**: U13-U16 need
++  the exact strings, and A5 and A12 are the rows that fail if a visible
++  vocabulary makes proposing one easier.
++
++### 4. The suite scores the document the engine would write
++
++- `_difference` resolves both sides with `to_performed` before comparing —
++  `Fixture` already holds the connection, and `_produced` already does this for
++  the volume axes.
++- `workout_id`, `report` and `proposed_exclusion` keep being compared as
++  emitted; they survive resolution untouched.
++- With a `workout_id`, match resolved blocks by their exercise set: the resolved
++  order is an artifact of which blocks the report happened to mention, not a
++  claim. With `workout_id: null` the order is still compared — there it is the
++  user's own *"poi"*.
++- **The thirty rows do not change**, which is 05's invariant: the suite measures
++  the same standard against the document that actually gets written. U7 keeps
++  its `?` and still measures only that nothing was invented.
++- Two sentences describing the old scoring go with it: `cli.py:665-669` and
++  § What the runner has to set up in `docs/logging/eval-set.md`. Sections 1-3 of
++  that file are untouched.
++
++## Free checks, before anything reaches a provider
++
++- The eighteen determined rows, each one's expected document stripped of every
++  value `to_performed` would fill, scored held by the new scorer. Table-driven
++  off `log_set`, no model.
++- A document that restates an unchanged prescribed block scores held.
++- A null against a prescription resolves to the prescribed value and `assumed`;
++  a null nothing can fill is refused, naming the field.
++- The brief's vocabulary comes from the connection and is empty against an
++  unenriched catalog.
++- **The first pass rescored**: its records under `TRAINER_HOME/eval-runs` hold
++  `performed` and `questions`, so 7 → 30 of 50 is reproducible for free. Write
++  the number here. If those records are gone, this check waits for the pass.
++- `log_evaluation.verify` clean, full suite and mypy green.
++
++## Then the pass
++
++One pass per provider, `--suite log`, with the drop reported per row and the
++rate written into this ticket. **Agree the spending budget first** (CLAUDE.md §
++Stochastic seams): the Ollama pass costs minutes, the Groq one money, and no
++pass runs unasked.
++
++## Acceptance criteria
++
++- [ ] A report that gives one number out of a prescribed block emits one value
++      and nulls, and the written document carries the prescription's numbers
++      marked `assumed` — verified by running `trainer log`, not by reading it.
++- [ ] The prompt's only `assumed` rule is the code's rule.
++- [ ] The brief holds the catalog's patterns and joints, read from the database
++      `TRAINER_DB` names.
++- [ ] Every one of the eighteen determined rows is held by its own expected
++      document with the fillable values stripped out.
++- [ ] The first pass, rescored, and the number written above.
++- [ ] `trainer eval --suite log` run against a real provider, the rate written
++      down, and every drop reported per row.
++- [ ] Full test suite and mypy green, with the numbers reported.
++
++## Not in this ticket — these need your word
++
++| line | what moving it would buy |
++|---|---|
++| charter § Constrained: *a refused document ends the run* (the planner replans; this does not) | the 4 determined runs of 54 that reached no scorable document, plus whatever exclusion value survives item 3. Small against the contract, and it stays where it is until you name it. |
++| charter § Constrained: *`assumed` is never the model's* | nothing. The code has always allowed it where the plan is silent, and item 2 makes the prompt say what the code does. The charter's wording describes it loosely; the ticket does not touch the charter. |
++| `trainer eval`'s *the bar is 100%* | an honest exit code. 100% on a reading task against a local 20b model is not what the first pass suggests. Not this ticket's call. |
++
++## Order
++
++05's one remaining criterion is a pass that holds, and this is why it can: land
++06, then run the pass once. Whether 05 closes on these numbers or stays a
++separate ticket is yours — both sit under ROADMAP.md § Session 9 item 5.

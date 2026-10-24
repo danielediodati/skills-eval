@@ -1,0 +1,86 @@
+--- a/docs/work/09-the-report-in-the-chat/issues/05-the-log-eval-suite-on-the-graph.md
++++ b/docs/work/09-the-report-in-the-chat/issues/05-the-log-eval-suite-on-the-graph.md
+@@ -2,7 +2,7 @@
+ 
+ Status: ready-for-agent
+ 
+-Blocked by: nothing now. 02 pointed the suite at the graph; what is left is a pass against a real provider, and 03 does not change what it measures.
++Blocked by: 06. 02 pointed the suite at the graph and 03 does not change what it measures, so what was left was running it -- and the first pass held 24 of 90. 06 is the contract that pass found; this one cannot reach its rate until that lands.
+ 
+ **02 did most of this, because it had to**: a module cannot be deleted while something imports it, so `log_evaluation.py` moved onto the graph with the loop. It enters at `logger.build`, answers the `interrupt()` with `UNANSWERED` and declines every proposed exclusion, scores a `Read` whose `questions` are a field rather than a reading of prose, and writes the ADR-0007 document into the eval runs directory. No marker is left anywhere in it.
+ 
+--- /dev/null
++++ b/docs/work/09-the-report-in-the-chat/issues/06-the-contract-the-first-pass-found.md
+@@ -0,0 +1,72 @@
++# The contract the first log pass found
++
++Status: needs-triage
++
++Blocked by: nothing in the tracker, and three decisions below. It **blocks 05**: the pass 05 asks for has been run, it came to 24 of 90, and 05 cannot close until the contract under it is right.
++
++The first log pass on the graph held **24 of 90** on `gpt-oss:20b`, against a bar of 100%. Rescored on the document the engine would write, the 50 valid runs of the determined half go from **7 to 30** held. Most of the drop is the contract between the emitted form, the prompt and the scorer -- not the model's reading of the sentence.
++
++| half | runs | held |
++|---|---|---|
++| 18 the report determines | 54 | 7, or 30 rescored (4 reached no valid document) |
++| 12 that must make it ask | 36 | 17 |
++
++The second number is `24 - 7`: the half that is scored on one bit is carrying the pass.
++
++## What the pass found
++
++| # | finding | where it lives |
++|---|---|---|
++| 1 | The emit schema requires every property, so a block the model writes must carry a number the user never gave -- and the prompt says *"Never `assumed`"* while the set expects `assumed` on exactly those numbers. | `coach/logger.LOGGING`, `tools.strict_schema` |
++| 2 | The scorer compares the emitted form field by field, so a document that restates the unchanged blocks as `assumed` fails a row whose *resolved* document is identical to the expected one. | `log_evaluation._difference` |
++| 3 | The exclusion vocabulary is nowhere in the context. | `coach/logger.LOGGING` |
++| 4 | A refusal ends the run, where the planner's goes back to the model. | the charter -- see below |
++
++Finding 1 is a contradiction inside one prompt: *"Provenance is `reported` ... Never `assumed`"* and, four bullets later, *"A number marked `assumed` has to be the prescribed one"*. The code is the second of the two -- `log._nothing_assumed_the_prescription_does_not_say` refuses only an `assumed` value the prescription **contradicts**, plus a load anywhere -- and so is the set: U2, U5, U9, U10, U12 and U18 all expect `assumed` inside a block the report does deviate on.
++
++Finding 3 is also a measurement hazard. Twelve patterns and seven joints exist in the catalog; the model sees two of them, as the examples `vertical push` and `shoulder` in the prompt -- which are U14's and U13's answers. U15 (`knee`) and U16 (`lumbar spine`) have no example to echo. Nothing on the logger's surface can supply the rest: `KEEPS` is `id, name, equipment, mechanic, primary_muscles`, so `movement_pattern` and `loaded_joints` are cut out of every tool result, `compare_variants` included.
++
++## What to build
++
++**The scorer compares the document the engine would write.**
++
++- The determined half's blocks are compared after `log.to_performed`, on both sides -- expected and emitted -- against the fixture. Volume is already scored that way (`_produced`); this is the same move, one field earlier.
++- `workout_id`, `report` and `proposed_exclusion` stay compared on the emitted document: `to_performed` returns blocks and nothing else, and the user's verbatim words are a claim the emission makes.
++- **The rows do not change.** 05's invariant holds: the suite measures a different implementation of the same thing, not a different standard. `docs/logging/eval-set.md` § How to read a row gains one line saying what the comparison is on; no JSON in it moves.
++- Blocks are matched by their exercise ids, the way `log._paired` matches them, and an unmatched block on either side is a difference. Where `workout_id` is null there is nothing to match against, so the document's own order stands -- U8's two blocks are a sequence, and swapping them still fails.
++
++**The prompt stops contradicting the shape.** One rule where there are two that disagree:
++
++- a block you have nothing to say about is left out whole, and adherence fills it in;
++- inside a block you do write, every field is required -- a value the user did not give is the prescription's own number, marked `assumed`.
++
++**The exclusion vocabulary is in the context, read from the data.** `catalog.values(connection, "movement_pattern")` and `catalog.joint_values(connection)`, never a copied list (CLAUDE.md § Standing rules). Nineteen short strings against a 1000-token completion budget. The two worked examples go when the full vocabulary arrives, so that no value sits nearer to hand than the others. **No seventh tool**: the surface is six named reads, and the charter says why.
++
++**Then the pass again.** Free before paid: the unit tests, then the 90 records already on disk rescored offline, then the local model, then Groq -- and only against a budget agreed first. The pass runs against the fixture `log_evaluation.prepared` builds, with `TRAINER_DB` pointed at it.
++
++## What this ticket does not do
++
++**A refusal does not go back to the model.** `evals/logger/charter.md` § Constrained: *"Exactly one emit call, with `PerformedWorkout` as a strict JSON schema (every property required, no extras), and no repair turn: a document that does not parse or does not validate ends the run as `refused`, and the model is never shown the refusal to try again."* The planner's loop is deliberately the opposite.
++
++Moving that line would buy at most the four determined runs of 54 that reached no valid document -- four of 90, against the 23 the scorer alone is worth, and some of those four are finding 1 arriving as a refusal rather than as a wrong field. It is a line only the user can move, in their own words, and this measurement does not argue for it yet. If the rate after this ticket is still short and the misses are refusals, that is the ticket to write then.
++
++**The shape does not learn to carry an absent value.** Same charter line: every property required. The prompt fix makes that requirement livable, and a nullable `amount` is a change to the document shape, to the migration under it and to every reader of a provenance column.
++
++## Decisions for the maintainer
++
++1. **Score the determined half on the resolved document?** This is the bar the ticket rests on. It stops scoring the economy of the emission -- a model that restates the whole prescription with correct `assumed` labels would hold -- and keeps every id, number and provenance that actually gets written. Recommended: yes, with the line added to the set.
++2. **The charter's free line *"Leaving a value out rather than filling it in"* is not what the emitted form allows**: inside a block, nothing can be left out, only the block can. Should that line read *leaving the block out*? A charter line changes only for a move named in the user's own words.
++3. **The budget for the pass.** The local pass costs hours of wall time and no money; a Groq pass is the first paid call of this ticket and needs one figure for the whole of it.
++
++Answered, this becomes `ready-for-agent`.
++
++## Acceptance criteria
++
++- [ ] An empty document and one restating the prescription as `assumed` score identically on a determined row -- a unit test, no model call.
++- [ ] U8's two blocks swapped still fail, and the test says so.
++- [ ] The 90 records of the failed pass, rescored offline, come to a number, and it is written down here.
++- [ ] The prompt carries one rule for a value the user did not give, and the agent emits `assumed` inside a reported block without being refused -- watched, not read.
++- [ ] The pattern and joint vocabularies reaching the context are the catalog's, asserted against a fixture whose vocabulary is not the project's.
++- [ ] `trainer eval --suite log` run again on the local model, against `TRAINER_DB`, with the number here and the drop reported per row.
++- [ ] A Groq pass with its number, if its budget was agreed.
++- [ ] The full test suite and mypy are green.

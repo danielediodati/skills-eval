@@ -1,0 +1,212 @@
+--- a/docs/work/10-the-mesocycle/issues/03-a-change-and-an-adaptation.md
++++ b/docs/work/10-the-mesocycle/issues/03-a-change-and-an-adaptation.md
+@@ -20,6 +20,11 @@
+ - A served workout is not checked against today's exclusions: an exclusion added after acceptance is still served. An adaptation, or a change, is the answer.
+ - An adapted workout accepted for today must count as that slot's serving (the `served` table, migration 0009), or asking again serves the unadapted slot beside it.
+ 
++## Built so far
++
++- Engine: `mesocycles.record_change` (keeps `accepted_after`, withdraws an unperformed serving of the old slots) and `mesocycles.record_adapted` (today's serving, replacing an unperformed one). Tested in `tests/test_mesocycles.py`; nothing calls them yet.
++- Waiting on the user: the entrance and planner charter lines this needs moved.
++
+ ## References
+ 
+ - ADR-0006, ADR-0007, ADR-0008; CONTEXT.md: Change, Adaptation, Negotiation
+--- a/src/trainer/engine/mesocycles.py
++++ b/src/trainer/engine/mesocycles.py
+@@ -42,6 +42,30 @@
+     Each slot is checked as a plan (`duration.check_plan`) before anything is
+     written. Nothing is prescribed: that happens when a slot is served.
+     """
++    return _keep(connection, slots, cycles=cycles, why=why, on=on, continuing=False)
++
++
++def record_change(
++    connection: sqlite3.Connection,
++    slots: Sequence[Sequence[workouts.PrescribedBlock]],
++    *,
++    cycles: int,
++    why: str,
++    on: str,
++) -> int:
++    """Replace the active mesocycle for the cycles left, counting from where it started, and return its id."""
++    return _keep(connection, slots, cycles=cycles, why=why, on=on, continuing=True)
++
++
++def _keep(
++    connection: sqlite3.Connection,
++    slots: Sequence[Sequence[workouts.PrescribedBlock]],
++    *,
++    cycles: int,
++    why: str,
++    on: str,
++    continuing: bool,
++) -> int:
+     for blocks in slots:
+         if not blocks:
+             raise workouts.WorkoutError("a workout is at least one block")
+@@ -52,13 +76,24 @@
+         performed = connection.execute(
+             "SELECT COUNT(*) FROM workouts WHERE state = 'performed'"
+         ).fetchone()[0]
++        accepted_after = performed
++        if continuing:
++            replaced = connection.execute(
++                "SELECT id, accepted_after FROM mesocycles WHERE ended_on IS NULL"
++            ).fetchone()
++            if replaced is None:
++                raise MesocycleError(f"no mesocycle has been accepted; {ASK_FOR_ONE}")
++            accepted_after = int(replaced["accepted_after"])
++            # Served under the old slots and not yet performed, it would be
++            # served beside the new one.
++            _withdraw_serving(connection, int(replaced["id"]), performed)
+         connection.execute(
+             "UPDATE mesocycles SET ended_on = ? WHERE ended_on IS NULL", (on,)
+         )
+         cursor = connection.execute(
+             "INSERT INTO mesocycles (accepted_on, accepted_after, cycles, why) "
+             "VALUES (?, ?, ?, ?)",
+-            (on, performed, cycles, why),
++            (on, accepted_after, cycles, why),
+         )
+         assert cursor.lastrowid is not None  # an INSERT always has one
+         mesocycle_id = cursor.lastrowid
+@@ -218,3 +253,44 @@
+             pass
+         raise
+     return found, workout_id
++
++
++def record_adapted(
++    connection: sqlite3.Connection, blocks: Sequence[workouts.PrescribedBlock], on: str
++) -> tuple[Today, int]:
++    """Prescribe an adapted workout as today's serving of its slot, and return its workout id.
++
++    A serving of the slot not yet performed is withdrawn; the mesocycle is untouched.
++    """
++    if not blocks:
++        raise workouts.WorkoutError("a workout is at least one block")
++    duration.check_plan([prescribed.block for prescribed in blocks])
++
++    connection.execute("BEGIN IMMEDIATE")
++    try:
++        found = today(connection)
++        performed = state.rotation(connection).performed
++        _withdraw_serving(connection, found.mesocycle, performed)
++        workout_id = workouts.write_prescribed(connection, blocks, on)
++        connection.execute(
++            "INSERT INTO served (workout_id, mesocycle_id, slot, served_after) "
++            "VALUES (?, ?, ?, ?)",
++            (workout_id, found.mesocycle, found.slot, performed),
++        )
++        connection.execute("COMMIT")
++    except Exception:
++        try:
++            connection.execute("ROLLBACK")
++        except sqlite3.Error:
++            pass
++        raise
++    return found, workout_id
++
++
++def _withdraw_serving(connection: sqlite3.Connection, mesocycle_id: int, performed: int) -> None:
++    """Delete the slot's serving at this count if it is still only prescribed; its rows cascade."""
++    connection.execute(
++        "DELETE FROM workouts WHERE state = 'prescribed' AND id IN "
++        "(SELECT workout_id FROM served WHERE mesocycle_id = ? AND served_after = ?)",
++        (mesocycle_id, performed),
++    )
+--- a/tests/test_mesocycles.py
++++ b/tests/test_mesocycles.py
+@@ -240,3 +240,91 @@
+ 
+     with pytest.raises(mesocycles.MesocycleError, match="split"):
+         mesocycles.today(connection)
++
++
++def test_a_change_continues_the_cycle_count(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    """ADR-0008 item 6: a change rewrites the cycles left, not the ones done."""
++    accepted(connection)
++    for _ in range(3):
++        _, served = mesocycles.record_served(connection, TODAY)
++        performed(connection, served)
++
++    changed = mesocycles.record_change(
++        connection, (slot("Plank"), slot("Barbell_Squat")), cycles=2, why="no squats first", on=TODAY
++    )
++
++    found = mesocycles.today(connection)
++    assert (found.mesocycle, found.slot, found.cycle) == (changed, 2, 2)
++    assert found.blocks == slot("Barbell_Squat")
++
++
++def test_a_change_withdraws_the_old_slot_served_and_not_performed(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    accepted(connection)
++    _, stale = mesocycles.record_served(connection, TODAY)
++
++    mesocycles.record_change(
++        connection, (slot("Plank"), slot("Barbell_Squat")), cycles=2, why="b", on=TODAY
++    )
++    _, served = mesocycles.record_served(connection, TODAY)
++
++    assert workouts.workout(connection, stale) is None
++    assert workouts.prescribed(connection, served) == slot("Plank")
++    assert connection.execute("SELECT COUNT(*) FROM workouts").fetchone()[0] == 1
++
++
++def test_a_change_with_nothing_to_change_is_a_state_naming_the_fix(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    with pytest.raises(mesocycles.MesocycleError, match="trainer plan --mesocycle"):
++        mesocycles.record_change(connection, (slot("Plank"),), cycles=2, why="b", on=TODAY)
++    assert mesocycles.active(connection) is None
++
++
++def test_an_adaptation_is_the_slots_serving_and_leaves_the_mesocycle(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    accepted(connection)
++    before = mesocycles.active(connection)
++
++    _, adapted = mesocycles.record_adapted(connection, slot("Plank", reps=10), TODAY)
++    _, served = mesocycles.record_served(connection, TODAY)
++
++    assert served == adapted
++    assert workouts.prescribed(connection, served) == slot("Plank", reps=10)
++    assert mesocycles.active(connection) == before
++
++
++def test_an_adaptation_replaces_the_unadapted_serving(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    accepted(connection)
++    _, unadapted = mesocycles.record_served(connection, TODAY)
++
++    _, adapted = mesocycles.record_adapted(connection, slot("Plank", reps=10), TODAY)
++
++    assert workouts.workout(connection, unadapted) is None
++    assert workouts.awaiting(connection) == workouts.workout(connection, adapted)
++
++
++def test_a_performed_adaptation_moves_the_rotation_on(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    accepted(connection)
++    _, adapted = mesocycles.record_adapted(connection, slot("Plank", reps=10), TODAY)
++    performed(connection, adapted)
++
++    found, _ = mesocycles.record_served(connection, TODAY)
++
++    assert found.slot == 2
++
++
++def test_an_adaptation_with_no_mesocycle_is_a_state(
++    connection: sqlite3.Connection, two_slots: Path
++) -> None:
++    with pytest.raises(mesocycles.MesocycleError, match="trainer plan --mesocycle"):
++        mesocycles.record_adapted(connection, slot("Plank"), TODAY)
++    assert connection.execute("SELECT COUNT(*) FROM workouts").fetchone()[0] == 0

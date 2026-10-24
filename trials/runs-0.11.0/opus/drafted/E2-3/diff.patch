@@ -1,0 +1,94 @@
+--- /dev/null
++++ b/docs/methodology.md
+@@ -0,0 +1,82 @@
++# What a workout is
++
++> **DRAFT, written by an agent for the user to edit.** TRAINER.md: *a human writes the methodology.* Nothing here is the user's until they have edited it, and nothing reads it yet.
++
++The planner's criteria for a good workout. The engine still decides only what is possible (ADR-0001); this document informs the choices the planner charter leaves free, and dictates none of them. Every number is a default: departing from one is allowed, and the block's `reason` says why.
++
++**Goal assumed:** muscle and general strength, for one person training alone with little equipment. *(User: confirm or replace. Onboarding picks the goal from session 13.)*
++
++## 1. The time buys sets, not exercises
++
++| when | do | not |
++|---|---|---|
++| time is left over | add a set to an exercise already in the plan | add another exercise |
++| time is short | drop an exercise, keep the sets of the rest | cut every exercise to one set |
++| a block is cheap | ask whether it is cheap because it is a circuit | add exercises to it until it fits |
++
++One exercise done for three or four hard sets trains a muscle more than four exercises done for one set each.
++
++## 2. How many exercises a group gets
++
++| group's share of the workout | exercises |
++|---|---|
++| under ~10 min | 1 |
++| ~10-20 min | 2 |
++| over ~20 min | 2-3 |
++
++- **The second exercise must differ from the first** in pattern, angle or muscle: a press and a fly, a horizontal and a vertical pull, a triceps and a biceps exercise. Two variants of the same movement (four push-ups) count as one exercise done four times.
++- **For `arms`, `legs` and `core`** the group spans several muscles (`muscle-groups.md`), so its exercises go to different muscles before any muscle gets a second.
++- A compound first, then isolation if there is time.
++
++## 3. What a working set is
++
++- **Close to failure**: the set ends with about 0-3 reps left in reserve. A set that ends far from failure is a warm-up, not a working set.
++- **Reps**: 6-15 for most work, up to 20-30 for isolation and body weight. Heavy work under 6 reps only where the load allows it.
++- **Body weight and bands**: the load cannot be raised, so the *exercise* is chosen to land the reps in range. If the user can do 30, pick the harder variant (`variant_of` / `regression_of` in the catalog), not more reps.
++- **Timed work**: 20-60 s holds; a carry or a plank is a working set when the last seconds are hard.
++- **Sets per exercise**: 2-4 working sets (rounds). Over the cycle, about 10-20 working sets per muscle is the reference.
++
++## 4. Which rest goes with which intent
++
++| intent | rest after a round |
++|---|---|
++| heavy compound, under 6 reps | 2.5-3 min |
++| compound, 6-15 reps | 1.5-2.5 min |
++| isolation | 60-90 s |
++| superset of two non-competing muscles | 1.5-2 min after the pair |
++| conditioning circuit | 30-60 s |
++
++A short rest before a hard compound set costs reps on the next set. Shortening rest to fit the clock is a cost to say in the `reason`, not a free saving.
++
++## 5. Straight sets, superset or circuit
++
++| structure | right when | the cheap version |
++|---|---|---|
++| **straight sets** | the default for compounds and for the main exercise of the day | - |
++| **superset** | the two exercises do not compete: push with pull, biceps with triceps, upper with lower, a main lift with core | two exercises for the same muscle, so the second is done tired |
++| **circuit** | the intent is conditioning, or every station is a different group and the time is genuinely short | several exercises for one muscle, chosen because three rests cost less than fifteen |
++
++A superset of non-competing muscles saves time without costing reps; that is the honest reason to use one. A circuit of variants of one movement is the shape that fits the clock, not a method.
++
++## Worked example: the plan that opened ticket 11.2
++
++Chest and arms, 45 minutes, body weight and bands.
++
++| what it did | what this document asks |
++|---|---|
++| four push-up variants in one circuit, 8 reps | one push-up variant hard enough that 8-15 reps is near failure, 3-4 straight sets, then one band fly or crossover |
++| five triceps exercises in one circuit | one triceps and one biceps exercise, supersetted because they do not compete |
++| 25 of 45 minutes | the leftover time goes into sets (§1) |
++
++## Sources
++
++*(Agent-listed from memory. User: verify each before it stays.)*
++
++| claim | source |
++|---|---|
++| more weekly sets per muscle, more growth; ~10+ as a reference | Schoenfeld, Ogborn, Krieger (2017), *J Sports Sci* 35(11) |
++| a wide rep range grows muscle when sets are near failure; heavy loads for maximal strength | Schoenfeld, Grgic, Ogborn, Krieger (2017), *J Strength Cond Res* 31(12) |
++| proximity to failure and hypertrophy | Refalo et al. (2023), *Sports Med* 53 |
++| longer rest between sets favours strength and growth | Schoenfeld et al. (2016), *J Strength Cond Res* 30(7); Grgic et al. (2018), *Sports Med* 48 |
++| supersets and time-efficient programme design | Weakley et al. (2017), *Eur J Appl Physiol* 117; Iversen et al. (2021), *Sports Med* 51 |
++| order, rest and progression for healthy adults | ACSM position stand (2009), *Med Sci Sports Exerc* 41(3) |
+--- a/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
++++ b/docs/work/11-a-plan-worth-doing/issues/02-nobody-ever-told-it-what-a-workout-is.md
+@@ -30,4 +30,6 @@
+ 
+ ## Comments
+ 
++**2026-10-23.** An agent's draft is at `docs/methodology.md`, for the user to edit. Still `needs-info` until they have: the goal it assumes and its sources are unconfirmed, and nothing reads it yet.
++
+ Issue 03 puts a floor under the clock. It does not fix this: given a floor and no methodology, filling the time by adding a tenth exercise to a circuit is still the cheapest move available.
